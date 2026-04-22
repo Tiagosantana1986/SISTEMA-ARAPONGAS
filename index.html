@@ -973,4 +973,492 @@
                     <tr>
                         <td><strong>${team.name}</strong></td>
                         <td><span class="badge badge-info">${team.abbreviation}</span></td>
-                        <td>${team
+                        <td>${team.coach || 'Não definido'}</td>
+                        <td><span class="badge badge-success">${athletes.length} atletas</span></td>
+                        <td class="action-buttons">
+                            <button class="btn btn-primary btn-sm" onclick="editTeam('${competitionId}', '${team.id}')">Editar</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteTeam('${competitionId}', '${team.id}')">Excluir</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function createTeam() {
+            const competitionId = document.getElementById('teamCompetitionSelect').value;
+            const name = document.getElementById('teamName').value.trim();
+            const abbreviation = document.getElementById('teamAbbreviation').value.trim().toUpperCase();
+            const coach = document.getElementById('teamCoach').value.trim();
+            
+            if (!competitionId || !name || !abbreviation) {
+                showAlert('Preencha todos os campos obrigatórios!', 'error');
+                return;
+            }
+            
+            if (abbreviation.length !== 3) {
+                showAlert('A sigla deve ter 3 letras!', 'error');
+                return;
+            }
+            
+            const team = { name, abbreviation, coach };
+            DB.saveTeam(competitionId, team);
+            
+            showAlert('Time criado com sucesso!');
+            document.getElementById('teamName').value = '';
+            document.getElementById('teamAbbreviation').value = '';
+            document.getElementById('teamCoach').value = '';
+            
+            loadTeams();
+            loadCompetitions();
+        }
+
+        function editTeam(competitionId, teamId) {
+            const team = DB.getTeams(competitionId).find(t => t.id === teamId);
+            if (!team) return;
+            
+            document.getElementById('modalTitle').textContent = 'Editar Time';
+            document.getElementById('modalContent').innerHTML = `
+                <div class="form-group">
+                    <label>Nome do Time</label>
+                    <input type="text" id="editTeamName" value="${team.name}">
+                </div>
+                <div class="form-group">
+                    <label>Sigla (3 letras)</label>
+                    <input type="text" id="editTeamAbbreviation" maxlength="3" value="${team.abbreviation}">
+                </div>
+                <div class="form-group">
+                    <label>Nome do Técnico</label>
+                    <input type="text" id="editTeamCoach" value="${team.coach || ''}">
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="updateTeam('${competitionId}', '${teamId}')">Salvar Alterações</button>
+                </div>
+            `;
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function updateTeam(competitionId, teamId) {
+            const updates = {
+                name: document.getElementById('editTeamName').value,
+                abbreviation: document.getElementById('editTeamAbbreviation').value.toUpperCase(),
+                coach: document.getElementById('editTeamCoach').value
+            };
+            
+            if (DB.updateTeam(competitionId, teamId, updates)) {
+                showAlert('Time atualizado com sucesso!');
+                closeEditModal();
+                loadTeams();
+            }
+        }
+
+        function deleteTeam(competitionId, teamId) {
+            if (confirm('Tem certeza que deseja excluir este time? Todos os atletas serão excluídos!')) {
+                DB.deleteTeam(competitionId, teamId);
+                showAlert('Time excluído com sucesso!');
+                loadTeams();
+                loadCompetitions();
+            }
+        }
+
+        // ============ ATHLETE FUNCTIONS ============
+        function loadTeamsForAthletes() {
+            const competitionId = document.getElementById('athleteCompetitionSelect').value;
+            const teamSelect = document.getElementById('athleteTeamSelect');
+            const formSection = document.getElementById('athleteFormSection');
+            
+            if (!competitionId) {
+                formSection.classList.add('hidden');
+                return;
+            }
+            
+            formSection.classList.remove('hidden');
+            const teams = DB.getTeams(competitionId);
+            
+            teamSelect.innerHTML = '<option value="">Selecione um time...</option>' +
+                teams.map(t => `<option value="${t.id}">${t.name} (${t.abbreviation})</option>`).join('');
+            
+            document.getElementById('athleteForm').classList.add('hidden');
+            document.getElementById('athletesList').innerHTML = '';
+        }
+
+        function loadAthletes() {
+            const competitionId = document.getElementById('athleteCompetitionSelect').value;
+            const teamId = document.getElementById('athleteTeamSelect').value;
+            
+            if (!competitionId || !teamId) {
+                document.getElementById('athleteForm').classList.add('hidden');
+                document.getElementById('athletesList').innerHTML = '';
+                return;
+            }
+            
+            document.getElementById('athleteForm').classList.remove('hidden');
+            const athletes = DB.getAthletes(competitionId, teamId);
+            const tbody = document.getElementById('athletesList');
+            
+            if (athletes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px;">Nenhum atleta cadastrado</td></tr>';
+                return;
+            }
+            
+            const positionNames = {
+                'GOALKEEPER': 'Goleiro',
+                'DEFENDER': 'Defensor',
+                'MIDFIELDER': 'Meio-campo',
+                'FORWARD': 'Atacante'
+            };
+            
+            tbody.innerHTML = athletes.map(athlete => `
+                <tr>
+                    <td><span class="badge badge-info">${athlete.number || '-'}</span></td>
+                    <td><strong>${athlete.name}</strong></td>
+                    <td>${positionNames[athlete.position] || athlete.position}</td>
+                    <td>${athlete.birthDate || '-'}</td>
+                    <td class="action-buttons">
+                        <button class="btn btn-primary btn-sm" onclick="editAthlete('${competitionId}', '${teamId}', '${athlete.id}')">Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteAthlete('${competitionId}', '${teamId}', '${athlete.id}')">Excluir</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function createAthlete() {
+            const competitionId = document.getElementById('athleteCompetitionSelect').value;
+            const teamId = document.getElementById('athleteTeamSelect').value;
+            const name = document.getElementById('athleteName').value.trim();
+            const number = document.getElementById('athleteNumber').value;
+            const position = document.getElementById('athletePosition').value;
+            const birthDate = document.getElementById('athleteBirthDate').value;
+            
+            if (!competitionId || !teamId || !name || !number) {
+                showAlert('Preencha todos os campos obrigatórios!', 'error');
+                return;
+            }
+            
+            const athlete = { name, number: parseInt(number), position, birthDate };
+            DB.saveAthlete(competitionId, teamId, athlete);
+            
+            showAlert('Atleta cadastrado com sucesso!');
+            document.getElementById('athleteName').value = '';
+            document.getElementById('athleteNumber').value = '';
+            document.getElementById('athleteBirthDate').value = '';
+            
+            loadAthletes();
+        }
+
+        function editAthlete(competitionId, teamId, athleteId) {
+            const athlete = DB.getAthletes(competitionId, teamId).find(a => a.id === athleteId);
+            if (!athlete) return;
+            
+            document.getElementById('modalTitle').textContent = 'Editar Atleta';
+            document.getElementById('modalContent').innerHTML = `
+                <div class="form-group">
+                    <label>Nome do Atleta</label>
+                    <input type="text" id="editAthleteName" value="${athlete.name}">
+                </div>
+                <div class="form-group">
+                    <label>Número da Camisa</label>
+                    <input type="number" id="editAthleteNumber" min="1" max="99" value="${athlete.number || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Posição</label>
+                    <select id="editAthletePosition">
+                        <option value="GOALKEEPER" ${athlete.position === 'GOALKEEPER' ? 'selected' : ''}>Goleiro</option>
+                        <option value="DEFENDER" ${athlete.position === 'DEFENDER' ? 'selected' : ''}>Defensor</option>
+                        <option value="MIDFIELDER" ${athlete.position === 'MIDFIELDER' ? 'selected' : ''}>Meio-campo</option>
+                        <option value="FORWARD" ${athlete.position === 'FORWARD' ? 'selected' : ''}>Atacante</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Data de Nascimento</label>
+                    <input type="date" id="editAthleteBirthDate" value="${athlete.birthDate || ''}">
+                </div>
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="updateAthlete('${competitionId}', '${teamId}', '${athleteId}')">Salvar Alterações</button>
+                </div>
+            `;
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function updateAthlete(competitionId, teamId, athleteId) {
+            const updates = {
+                name: document.getElementById('editAthleteName').value,
+                number: parseInt(document.getElementById('editAthleteNumber').value),
+                position: document.getElementById('editAthletePosition').value,
+                birthDate: document.getElementById('editAthleteBirthDate').value
+            };
+            
+            if (DB.updateAthlete(competitionId, teamId, athleteId, updates)) {
+                showAlert('Atleta atualizado com sucesso!');
+                closeEditModal();
+                loadAthletes();
+            }
+        }
+
+        function deleteAthlete(competitionId, teamId, athleteId) {
+            if (confirm('Tem certeza que deseja excluir este atleta?')) {
+                DB.deleteAthlete(competitionId, teamId, athleteId);
+                showAlert('Atleta excluído com sucesso!');
+                loadAthletes();
+            }
+        }
+
+        // ============ MATCH FUNCTIONS ============
+        function loadMatches() {
+            const competitionId = document.getElementById('matchCompetitionSelect').value;
+            
+            if (!competitionId) {
+                document.getElementById('matchesContent').innerHTML = '';
+                return;
+            }
+            
+            const matches = DB.getMatches(competitionId);
+            const teams = DB.getTeams(competitionId);
+            const container = document.getElementById('matchesContent');
+            
+            if (matches.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px;">
+                        <p style="color: #999; margin-bottom: 20px;">Nenhuma partida gerada</p>
+                        <button class="btn btn-success" onclick="generateMatches('${competitionId}')">Gerar Partidas</button>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group matches by round
+            const matchesByRound = {};
+            matches.forEach(match => {
+                const round = match.round || 1;
+                if (!matchesByRound[round]) matchesByRound[round] = [];
+                matchesByRound[round].push(match);
+            });
+            
+            let html = '';
+            Object.keys(matchesByRound).sort().forEach(round => {
+                html += `<h3 style="margin: 20px 0; color: #1f3c88;">Rodada ${round}</h3>`;
+                
+                matchesByRound[round].forEach(match => {
+                    const homeTeam = teams.find(t => t.id === match.homeTeamId);
+                    const awayTeam = teams.find(t => t.id === match.awayTeamId);
+                    
+                    if (!homeTeam || !awayTeam) return;
+                    
+                    const statusClass = {
+                        'SCHEDULED': 'badge-warning',
+                        'IN_PROGRESS': 'badge-info',
+                        'FINISHED': 'badge-success'
+                    }[match.status] || 'badge-info';
+                    
+                    const statusText = {
+                        'SCHEDULED': 'Agendada',
+                        'IN_PROGRESS': 'Em Andamento',
+                        'FINISHED': 'Finalizada'
+                    }[match.status] || match.status;
+                    
+                    html += `
+                        <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 15px;">
+                            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;">
+                                <div style="text-align: right;">
+                                    <strong>${homeTeam.name}</strong>
+                                    <span class="badge badge-info" style="margin-left: 10px;">${homeTeam.abbreviation}</span>
+                                </div>
+                                <div style="text-align: center;">
+                                    ${match.status === 'SCHEDULED' ? `
+                                        <span style="font-size: 24px; color: #999;">VS</span>
+                                    ` : `
+                                        <span style="font-size: 32px; font-weight: bold; color: #1f3c88;">
+                                            ${match.homeScore || 0} x ${match.awayScore || 0}
+                                        </span>
+                                    `}
+                                    <br>
+                                    <span class="badge ${statusClass}">${statusText}</span>
+                                </div>
+                                <div style="text-align: left;">
+                                    <span class="badge badge-info" style="margin-right: 10px;">${awayTeam.abbreviation}</span>
+                                    <strong>${awayTeam.name}</strong>
+                                </div>
+                            </div>
+                            ${match.status === 'SCHEDULED' ? `
+                                <div style="margin-top: 15px; text-align: center;">
+                                    <button class="btn btn-primary btn-sm" onclick="startMatch('${competitionId}', '${match.id}')">Iniciar Partida</button>
+                                </div>
+                            ` : match.status === 'IN_PROGRESS' ? `
+                                <div style="margin-top: 15px; text-align: center;">
+                                    <input type="number" id="home_${match.id}" placeholder="Casa" style="width: 60px; padding: 5px;" min="0">
+                                    <input type="number" id="away_${match.id}" placeholder="Fora" style="width: 60px; padding: 5px; margin-left: 10px;" min="0">
+                                    <button class="btn btn-success btn-sm" style="margin-left: 10px;" onclick="updateScore('${competitionId}', '${match.id}')">Atualizar Placar</button>
+                                    <button class="btn btn-warning btn-sm" style="margin-left: 10px;" onclick="finishMatch('${competitionId}', '${match.id}')">Finalizar</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function startMatch(competitionId, matchId) {
+            DB.updateMatch(competitionId, matchId, { status: 'IN_PROGRESS' });
+            showAlert('Partida iniciada!');
+            loadMatches();
+        }
+
+        function updateScore(competitionId, matchId) {
+            const homeScore = parseInt(document.getElementById(`home_${matchId}`).value) || 0;
+            const awayScore = parseInt(document.getElementById(`away_${matchId}`).value) || 0;
+            
+            DB.updateMatch(competitionId, matchId, { homeScore, awayScore });
+            showAlert('Placar atualizado!');
+            loadMatches();
+        }
+
+        function finishMatch(competitionId, matchId) {
+            DB.updateMatch(competitionId, matchId, { status: 'FINISHED' });
+            showAlert('Partida finalizada!');
+            loadMatches();
+        }
+
+        // ============ STANDINGS FUNCTIONS ============
+        function loadStandings() {
+            const competitionId = document.getElementById('standingsCompetitionSelect').value;
+            
+            if (!competitionId) {
+                document.getElementById('standingsContent').innerHTML = '';
+                return;
+            }
+            
+            const teams = DB.getTeams(competitionId);
+            const matches = DB.getMatches(competitionId).filter(m => m.status === 'FINISHED');
+            
+            const standings = teams.map(team => {
+                let points = 0, played = 0, won = 0, drawn = 0, lost = 0, goalsFor = 0, goalsAgainst = 0;
+                
+                matches.forEach(match => {
+                    if (match.homeTeamId === team.id) {
+                        played++;
+                        goalsFor += match.homeScore || 0;
+                        goalsAgainst += match.awayScore || 0;
+                        
+                        if (match.homeScore > match.awayScore) { won++; points += 3; }
+                        else if (match.homeScore === match.awayScore) { drawn++; points += 1; }
+                        else { lost++; }
+                    } else if (match.awayTeamId === team.id) {
+                        played++;
+                        goalsFor += match.awayScore || 0;
+                        goalsAgainst += match.homeScore || 0;
+                        
+                        if (match.awayScore > match.homeScore) { won++; points += 3; }
+                        else if (match.awayScore === match.homeScore) { drawn++; points += 1; }
+                        else { lost++; }
+                    }
+                });
+                
+                return {
+                    ...team,
+                    points, played, won, drawn, lost, goalsFor, goalsAgainst,
+                    goalDifference: goalsFor - goalsAgainst
+                };
+            });
+            
+            standings.sort((a, b) => {
+                if (b.points !== a.points) return b.points - a.points;
+                if (b.won !== a.won) return b.won - a.won;
+                if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+                return b.goalsFor - a.goalsFor;
+            });
+            
+            const container = document.getElementById('standingsContent');
+            
+            if (standings.length === 0) {
+                container.innerHTML = '<p style="text-align: center; padding: 40px; color: #999;">Nenhum time cadastrado</p>';
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Time</th>
+                                <th>P</th>
+                                <th>J</th>
+                                <th>V</th>
+                                <th>E</th>
+                                <th>D</th>
+                                <th>GP</th>
+                                <th>GC</th>
+                                <th>SG</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${standings.map((team, index) => `
+                                <tr>
+                                    <td><strong>${index + 1}º</strong></td>
+                                    <td>
+                                        <strong>${team.name}</strong>
+                                        <span class="badge badge-info" style="margin-left: 10px;">${team.abbreviation}</span>
+                                    </td>
+                                    <td><strong>${team.points}</strong></td>
+                                    <td>${team.played}</td>
+                                    <td>${team.won}</td>
+                                    <td>${team.drawn}</td>
+                                    <td>${team.lost}</td>
+                                    <td>${team.goalsFor}</td>
+                                    <td>${team.goalsAgainst}</td>
+                                    <td>${team.goalDifference > 0 ? '+' : ''}${team.goalDifference}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // ============ MODAL FUNCTIONS ============
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        // ============ INITIALIZATION ============
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCompetitions();
+            loadCompetitionSelects();
+            
+            // Close modal when clicking outside
+            window.onclick = (event) => {
+                const modal = document.getElementById('editModal');
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            };
+            
+            // Add sample data if empty
+            if (DB.getCompetitions().length === 0) {
+                const comp = DB.saveCompetition({
+                    name: 'Campeonato Municipal',
+                    season: '2024',
+                    sport: 'FOOTBALL',
+                    format: 'LEAGUE'
+                });
+                
+                const team1 = DB.saveTeam(comp.id, { name: 'Barcelona', abbreviation: 'BAR', coach: 'Xavi Hernández' });
+                const team2 = DB.saveTeam(comp.id, { name: 'Real Madrid', abbreviation: 'RMA', coach: 'Carlo Ancelotti' });
+                const team3 = DB.saveTeam(comp.id, { name: 'Manchester City', abbreviation: 'MCI', coach: 'Pep Guardiola' });
+                const team4 = DB.saveTeam(comp.id, { name: 'Bayern Munich', abbreviation: 'BAY', coach: 'Thomas Tuchel' });
+                
+                DB.saveAthlete(comp.id, team1.id, { name: 'Robert Lewandowski', number: 9, position: 'FORWARD', birthDate: '1988-08-21' });
+                DB.saveAthlete(comp.id, team1.id, { name: 'Pedri', number: 8, position: 'MIDFIELDER', birthDate: '2002-11-25' });
+                DB.saveAthlete(comp.id, team2.id, { name: 'Vinicius Jr', number: 7, position: 'FORWARD', birthDate: '2000-07-12' });
+                DB.saveAthlete(comp.id, team2.id, { name: 'Jude Bellingham', number: 5, position: 'MIDFIELDER', birthDate: '2003-06-29' });
+                
+                showAlert('Sistema inicializado com dados de exemplo!');
+                loadCompetitions();
+            }
+        });
+    </script>
+</body>
+</html>
